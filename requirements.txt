@@ -5,3 +5,6 @@ itsdangerous
 Jinja2
 peewee
 Werkzeug
+sklearn
+nltk
+numpy
