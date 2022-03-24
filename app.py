@@ -12,8 +12,26 @@ from sklearn.linear_model import LinearRegression
 from sklearn.feature_extraction.text import TfidfVectorizer
 import numpy as np
 import pickle
+import psycopg2
+from datetime import date
 
 app = Flask(__name__)
+
+create_table_sql = """
+CREATE TABLE IF NOT EXISTS comments (
+  id serial PRIMARY KEY,
+  toxic boolean NOT NULL,
+  category VARCHAR ( 50 ) NOT NULL,
+  comment_date timestamp NOT NULL
+);
+"""
+
+url = urlparse.urlparse(os.environ['DATABASE_URL'])
+dbname = url.path[1:]
+user = url.username
+password = url.password
+host = url.hostname
+port = url.port
 
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -39,17 +57,27 @@ pipeline = Pipeline([
     ("vectorizer", loaded_vectorizer),
     ("model", loaded_model)
 ])
-
-@app.route('/')
-def index():
-    return render_template('index.html')
     
 @app.route('/classify')
 def classify():
     body = request.json
+    
+    conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host, port=port)
+    cursor = conn.cursor()
+    category = body['category']
+    cur_date = date.today()
+    
+
+    cursor.execute(create_table_sql)
     comment = body['text']
     result = pipeline.predict([comment])[0]
     probability = pipeline.predict_proba([comment])[0][1]
+    
+    cursor.execute(f"INSERT INTO comments (toxic, category, comment_date) VALUES ({result},'{category}','{cur_date}')")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
     return jsonify({"verdict": str(result), "probability": str(probability)})
 
 if __name__ == '__main__': app.run(debug=False)
